@@ -46,4 +46,21 @@ class FITtingTree:
 
         return segments
 
+    def binary_search(self, segment, start_pos, end_pos, key):
+        # Binary search segment and buffer and return value
+        return 0
+
+    def search_segment(self, segment, key):
+        position = (key - segment.start_point) * segment.slope
+        return self.binary_serarch(segment, position-self.error, position+self.error, key)
+
+    def search_tree(self, key):
+        # find the segment that this key belongs to
+        return 0
+
+    def look_up(self, key):
+        seg = self.search_tree(key) # A segment
+        val = self.search_segment(seg, key)
+        return val
+
 

@@ -1,3 +1,5 @@
+import bisect
+import math
 import collections
 
 
@@ -8,7 +10,7 @@ class Leaf:
         self.parent = parent
         self.branching_factor = branching_factor
         self.keys = []
-        self.children = []  # (key, value)
+        self.children = []  # A Segment
 
 
 class Node:
@@ -24,9 +26,10 @@ class Node:
 
 
 class Segment:
-    def __init__(self, high_slope, low_slope, start, end):
+    def __init__(self, high_slope, low_slope, start, end, buffer_error):
         self.high_slope = high_slope
         self.low_slope = low_slope
         self.start_point = start  # (key, location) tuple
         self.end_point = end
-        self.buffer = collections.deque()
+        self.buffer = collections.deque(buffer_error)
+        self.slope = (high_slope + low_slope) / 2
