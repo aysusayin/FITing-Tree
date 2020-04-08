@@ -1,35 +1,54 @@
-import bisect
-import math
-import collections
-
-
-class Leaf:
-    def __init__(self, previous_leaf, next_leaf, parent, branching_factor=16):
-        self.previous = previous_leaf
-        self.next = next_leaf
-        self.parent = parent
-        self.branching_factor = branching_factor
-        self.keys = []
-        self.children = []  # A Segment
+import constants as const
 
 
 class Node:
-    def __init__(self, previous_node, next_node, keys, children, parent=None, branching_factor=16):
+    def __init__(self, previous_node, next_node, is_leaf, parent=None, branching_factor=16):
         self.previous = previous_node
         self.next = next_node
-        self.keys = keys  # NOTE: must keep keys sorted
-        self.children = children  # NOTE: children must correspond to parents.
         self.parent = parent
         self.branching_factor = branching_factor
-        for child in children:
-            child.parent = self
+        self.keys = []  # NOTE: must keep keys sorted
+        self.children = []  # NOTE: children must correspond to parents.
+        self.is_leaf = is_leaf
+
+    def set_children(self, keys, children):
+        self.keys = keys
+        self.children = children
+        if not self.is_leaf:
+            for child in children:
+                child.parent = self
+
+    def split(self):
+        is_leaf = False
+        new_node_keys = []
+        new_node_children = []
+        if self.is_leaf:
+            new_node_keys = self.keys[(len(self.keys) // 2):]
+            new_node_children = self.children[(len(self.children) // 2):]
+            self.keys = self.keys[:(len(self.keys) // 2)]
+            self.children = self.children[:(len(self.children) // 2)]
+            is_leaf = True
+        else:
+            new_node_keys = self.keys[((len(self.keys) + 1) // 2) - 1:]
+            new_node_children = self.children[(len(self.children) // 2):]
+            self.keys = self.keys[:((len(self.keys) + 1) // 2) - 1]
+            self.children = self.children[:(len(self.children) // 2)]
+            new_node_keys.pop(0)
+        new_node = Node(self, self.next, is_leaf, self.parent, self.branching_factor)
+        new_node.set_children(new_node_keys, new_node_children)
+        self.next = new_node
+
+        return new_node
 
 
 class Segment:
-    def __init__(self, high_slope, low_slope, start, end, buffer_error):
+    def __init__(self, high_slope, low_slope, start, end):
         self.high_slope = high_slope
         self.low_slope = low_slope
-        self.start_point = start  # (key, location) tuple
-        self.end_point = end
-        self.buffer = collections.deque(buffer_error)
+        self.start_key = start  # (key, location) tuple
+        self.end_key = end
         self.slope = (high_slope + low_slope) / 2
+        self.seg_file_name = '%s%d_segment' % (const.DATABASE_LOCATION, self.start_key)
+        self.buff_file_name = '%s%d_buffer' % (const.DATABASE_LOCATION, self.end_key)
+        open(self.seg_file_name, 'wb+').close()
+        open(self.buff_file_name, 'wb+').close()
