@@ -32,7 +32,7 @@ class FITtingTree:
                 low_slope = max(low_slope, tmp_low_slope)
                 end_key = key
             else:
-                new_segment = Segment(high_slope, low_slope,
+                new_segment = Segment((high_slope + low_slope)/2,
                                       origin_key,
                                       end_key)
                 high_slope = float('inf')
@@ -42,6 +42,10 @@ class FITtingTree:
                 end_key = key
                 segments.append(new_segment)
 
+        new_segment = Segment((high_slope + low_slope) / 2,
+                              origin_key,
+                              end_key)
+        segments.append(new_segment)
         return segments
 
     @staticmethod
@@ -104,13 +108,20 @@ class FITtingTree:
 
     def look_up(self, key):
         node = self.__search_tree(key)
-        seg = node.segments[bisect_left(node.keys, key)]
+        seg = node.children[bisect_left(node.keys, key)]
         val = self.__search_segment(seg, key)
         return val
 
     def put(self, key_value, fields):
         leaf = self.__search_tree(key_value)
-        segment = leaf.segments[bisect_left(leaf.keys, key_value)]
+
+        if leaf.children:
+            ind = bisect_left(leaf.keys, key_value) - 1
+            segment = leaf.children[ind]
+        else:
+            segment = Segment(1, key_value, key_value)
+            leaf.keys.append(key_value)
+            leaf.children.append(segment)
 
         # Database update - delta insert
         buffer_name = segment.buff_file_name
@@ -156,7 +167,8 @@ class FITtingTree:
 
             # Index update
             # remove this segment and add the new ones
-            leaf.segments.pop(key_value)  # remove this segment
+            leaf.keys.remove(segment.start_key)
+            leaf.children.remove(segment)  # remove this segment
             for s in new_segments:
                 self.__insert_segment(s, leaf)
 
@@ -201,13 +213,13 @@ class FITtingTree:
             if not tmp.is_leaf:
                 for c in tmp.children:
                     queue.append(c)
-                print('Node:')
-                print(tmp)
-                print('Parent:')
-                print(tmp.parent)
-                print('Node keys:')
-                print(tmp.keys)
-                print('-----------------')
+            print('Node:')
+            print(tmp)
+            print('Parent:')
+            print(tmp.parent)
+            print('Node keys:')
+            print(tmp.keys)
+            print('-----------------')
 
     @staticmethod
     def __split_files(segments, tmp_file_name):
@@ -215,18 +227,17 @@ class FITtingTree:
         for s in segments:
             tmp_key = tmp_file.read(const.KEY_SIZE)
             tmp_key_readable = int.from_bytes(tmp_key, byteorder='big')
-            if s.start_key == tmp_key_readable:  # This should be unnecessary since the segments are sorted
-                # Start copying
-                with open(s.seg_file_name, 'wb') as f:
-                    while tmp_key_readable != s.end_key:
-                        f.write(tmp_key)
-                        f.write(tmp_file.read(const.ALL_FIELDS_SIZE))
-                        tmp_key = tmp_file.read(const.KEY_SIZE)
-                        tmp_key_readable = int.from_bytes(tmp_key, byteorder='big')
+            # Start copying
+            with open(s.seg_file_name, 'wb') as f:
+                while tmp_key_readable != s.end_key:
                     f.write(tmp_key)
                     f.write(tmp_file.read(const.ALL_FIELDS_SIZE))
+                    tmp_key = tmp_file.read(const.KEY_SIZE)
+                    tmp_key_readable = int.from_bytes(tmp_key, byteorder='big')
+                f.write(tmp_key)
+                f.write(tmp_file.read(const.ALL_FIELDS_SIZE))
         tmp_file.close()
-        # TODO: os.remove(tmp_file_name)
+        #os.remove(tmp_file_name)
 
     @staticmethod
     def __concatenate_files(segment_file_name, buffer_file_name):
@@ -240,15 +251,15 @@ class FITtingTree:
         while key_buff or key_seg:
             key_buff_readable = int.from_bytes(key_buff, byteorder='big')
             key_seg_readable = int.from_bytes(key_seg, byteorder='big')
-            if not key_buff or key_buff_readable > key_seg_readable:
+            if key_seg and (not key_buff or key_buff_readable > key_seg_readable):
                 new_segment_file.write(key_seg)
                 keys.append(key_seg_readable)
-                segment_file.seek(const.ALL_FIELDS_SIZE)
+                new_segment_file.write(segment_file.read(const.ALL_FIELDS_SIZE))
                 key_seg = segment_file.read(const.KEY_SIZE)
-            elif not key_seg or key_seg_readable > key_buff_readable:
+            elif key_buff and (not key_seg or key_seg_readable > key_buff_readable):
                 new_segment_file.write(key_buff)
                 keys.append(key_buff_readable)
-                buffer_file.seek(const.ALL_FIELDS_SIZE)
+                new_segment_file.write(buffer_file.read(const.ALL_FIELDS_SIZE))
                 key_buff = buffer_file.read(const.KEY_SIZE)
             else:
                 break

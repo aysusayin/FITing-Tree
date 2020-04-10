@@ -42,13 +42,13 @@ class Node:
 
 
 class Segment:
-    def __init__(self, high_slope, low_slope, start, end):
-        self.high_slope = high_slope
-        self.low_slope = low_slope
+    def __init__(self, slope, start, end):
         self.start_key = start  # (key, location) tuple
         self.end_key = end
-        self.slope = (high_slope + low_slope) / 2
+        self.slope = slope
         self.seg_file_name = '%s%d_segment' % (const.DATABASE_LOCATION, self.start_key)
-        self.buff_file_name = '%s%d_buffer' % (const.DATABASE_LOCATION, self.end_key)
-        open(self.seg_file_name, 'wb+').close()
-        open(self.buff_file_name, 'wb+').close()
+        self.buff_file_name = '%s%d_buffer' % (const.DATABASE_LOCATION, self.start_key)
+        f = open(self.seg_file_name, 'wb+')
+        f.close()
+        f = open(self.buff_file_name, 'wb+')
+        f.close()
