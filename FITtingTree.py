@@ -9,8 +9,10 @@ from bisect import bisect_left
 class FITtingTree:
     def __init__(self, error, buffer_error, branching_factor=16):
         self.branching_factor = branching_factor
-        self.leaves = Node(None, None, True, branching_factor=branching_factor)  # Linked List of leaves
-        self.root = self.leaves
+        self.root = Node(None, None, True, branching_factor=branching_factor)
+        seg = Segment(1, 1, 1)
+        self.root.set_children([1], [seg])
+        self.put(1, [0 for _ in range(const.FIELD_NUM)])
         self.error = error - buffer_error
         self.buffer_error = buffer_error
 
@@ -22,9 +24,11 @@ class FITtingTree:
         origin_key = keys[0]
         origin_loc = locations[0]
         end_key = keys[0]
-        for (key, loc) in list(zip(keys[1:], locations[1:])):
+        for i in range(1, len(keys)):
+            key = keys[i]
+            loc = locations[i]
             tmp_point_slope = (loc - origin_loc) / (key - origin_key)
-            if low_slope < tmp_point_slope < high_slope:
+            if low_slope <= tmp_point_slope <= high_slope:
                 # Point is inside the cone
                 tmp_high_slope = ((loc + self.error) - origin_loc) / (key - origin_key)
                 tmp_low_slope = ((loc - self.error) - origin_loc) / (key - origin_key)
@@ -32,7 +36,10 @@ class FITtingTree:
                 low_slope = max(low_slope, tmp_low_slope)
                 end_key = key
             else:
-                new_segment = Segment((high_slope + low_slope)/2,
+                slope = (high_slope + low_slope)/2
+                if end_key == origin_key:
+                    slope = 1
+                new_segment = Segment(slope,
                                       origin_key,
                                       end_key)
                 high_slope = float('inf')
@@ -42,10 +49,15 @@ class FITtingTree:
                 end_key = key
                 segments.append(new_segment)
 
-        new_segment = Segment((high_slope + low_slope) / 2,
+        slope = (high_slope + low_slope) / 2
+        if end_key == origin_key:
+            slope = 1
+
+        new_segment = Segment(slope,
                               origin_key,
                               end_key)
         segments.append(new_segment)
+
         return segments
 
     @staticmethod
@@ -61,13 +73,18 @@ class FITtingTree:
         return key, fields
 
     @staticmethod
-    def __binary_file_search(file, key, start_pos, end_pos):
+    def __binary_file_search(file, key, start_pos=0, end_pos=None):
         pos = -1
         left = start_pos
-        right = end_pos
+        if end_pos:
+            right = end_pos
+        else:
+            right = int(os.path.getsize(file) / const.RECORD_SIZE) - 1
         with open(file, 'rb') as seg_file:
             while left <= right:
-                mid = left + (right - left) // 2
+                mid = int(left + (right - left) // 2)
+                print('file: %s' % file)
+                print('left: %d right: %d' % (left, right))
                 seg_file.seek(const.RECORD_SIZE * mid, 0)
                 tmp_key = int.from_bytes(seg_file.read(const.KEY_SIZE), byteorder='big')
                 if tmp_key == key:
@@ -87,7 +104,7 @@ class FITtingTree:
         if position != -1:
             return self.__parse_fields(segment.seg_file_name, position)
 
-        position = self.__binary_file_search(segment.buff_file_name, key, start_pos, end_pos)
+        position = self.__binary_file_search(segment.buff_file_name, key)
 
         if position != -1:
             return self.__parse_fields(segment.buff_file_name, position)
@@ -96,32 +113,28 @@ class FITtingTree:
 
     def __search_segment(self, segment, key):
         position = (key - segment.start_key) * segment.slope
-        return self.__binary_search(segment, position - self.error, position + self.error, key)
+        return self.__binary_search(segment, max(0, position - self.error), position + self.error, key)
 
     def __search_tree(self, key):
         # find the segment that this key belongs to
         current_node = self.root
         while not current_node.is_leaf:
             idx = bisect_left(current_node.keys, key)
-            current_node = current_node.children[idx]
+            current_node = current_node.children[idx-1]
         return current_node
 
     def look_up(self, key):
         node = self.__search_tree(key)
-        seg = node.children[bisect_left(node.keys, key)]
+        seg = node.children[min(bisect_left(node.keys, key), len(node.children)-1)]
         val = self.__search_segment(seg, key)
         return val
 
     def put(self, key_value, fields):
         leaf = self.__search_tree(key_value)
 
-        if leaf.children:
-            ind = bisect_left(leaf.keys, key_value) - 1
-            segment = leaf.children[ind]
-        else:
-            segment = Segment(1, key_value, key_value)
-            leaf.keys.append(key_value)
-            leaf.children.append(segment)
+        ind = bisect_left(leaf.keys, key_value) - 1
+        segment = leaf.children[ind]
+        #print('HERE33 key_to_add: %d, ind: %d, segment_start_key: %d' % (key_value, ind, segment.start_key))
 
         # Database update - delta insert
         buffer_name = segment.buff_file_name
@@ -134,8 +147,9 @@ class FITtingTree:
             # Buffer needs to be sorted so put the key to the right place
             while tmp_key and readable_tmp_key < key_value:
                 buffer_copy.write(tmp_key)
-                buffer_copy.write(f.read(const.RECORD_SIZE - const.KEY_SIZE))
+                buffer_copy.write(f.read(const.ALL_FIELDS_SIZE))
                 tmp_key = f.read(const.KEY_SIZE)
+                readable_tmp_key = int.from_bytes(tmp_key, byteorder='big')
 
             buffer_copy.write(key_value.to_bytes(const.KEY_SIZE, byteorder='big', signed=True))
             for field in fields:
@@ -143,7 +157,7 @@ class FITtingTree:
 
             while tmp_key:
                 buffer_copy.write(tmp_key)
-                buffer_copy.write(f.read(const.RECORD_SIZE - const.KEY_SIZE))
+                buffer_copy.write(f.read(const.ALL_FIELDS_SIZE))
                 tmp_key = f.read(const.KEY_SIZE)
 
         buffer_copy.close()
@@ -172,37 +186,26 @@ class FITtingTree:
             for s in new_segments:
                 self.__insert_segment(s, leaf)
 
-    def __insert_segment(self, segment, leaf=None):
+    def __insert_segment(self, segment, leaf):
         key = segment.start_key
-        if leaf is None:
-            leaf = self.__search_tree(key)
-
         i = bisect_left(leaf.keys, key)
         leaf.keys.insert(i, key)
         leaf.children.insert(i, segment)
 
-        if len(leaf.children) >= self.branching_factor:
-            new_node = leaf.split()
-            parent = leaf.parent
-
-            i = bisect_left(parent.keys, new_node.keys[0])
-            parent.keys.insert(i, new_node.keys[0])
-            parent.children.insert(i + 1, new_node)
-
-            while parent.children >= self.branching_factor:
-                child = parent
-                new_child = parent.split()
-                parent = new_child.parent
-                if parent is None:
-                    # create a parent node and break
-                    new_root = Node(None, None, False, None, self.branching_factor)
-                    new_root.set_children([new_child.keys[0]], [child, new_child])
-                    break
-                else:
-                    # add new node to parent
-                    i = bisect_left(parent.keys, new_child.keys[0])
-                    parent.keys.insert(i, new_child.keys[0])
-                    parent.children.insert(i + 1, new_child)
+        while len(leaf.children) >= self.branching_factor:
+            new_child = leaf.split()  # leaf, new_child
+            if leaf.parent is None:
+                # create a parent node and break
+                new_root = Node(None, None, False, None, self.branching_factor)
+                new_root.set_children([new_child.keys[0]], [leaf, new_child])
+                self.root = new_root
+                break
+            else:
+                leaf = leaf.parent
+                # add new node to parent
+                i = bisect_left(leaf.keys, new_child.keys[0])
+                leaf.keys.insert(i, new_child.keys[0])
+                leaf.children.insert(i + 1, new_child)
 
     def print_tree(self):
         queue = collections.deque()
@@ -237,7 +240,7 @@ class FITtingTree:
                 f.write(tmp_key)
                 f.write(tmp_file.read(const.ALL_FIELDS_SIZE))
         tmp_file.close()
-        #os.remove(tmp_file_name)
+        os.remove(tmp_file_name)
 
     @staticmethod
     def __concatenate_files(segment_file_name, buffer_file_name):

@@ -52,3 +52,4 @@ class Segment:
         f.close()
         f = open(self.buff_file_name, 'wb+')
         f.close()
+        #print('new segment created start_key: %d, end_key: %d, slope: %f' % (start, end, slope))
