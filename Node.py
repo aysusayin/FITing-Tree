@@ -20,25 +20,24 @@ class Node:
 
     def split(self):
         is_leaf = False
-        new_node_keys = []
-        new_node_children = []
         if self.is_leaf:
             new_node_keys = self.keys[(len(self.keys) // 2):]
             new_node_children = self.children[(len(self.children) // 2):]
             self.keys = self.keys[:(len(self.keys) // 2)]
             self.children = self.children[:(len(self.children) // 2)]
             is_leaf = True
+            k = new_node_keys[0]
         else:
             new_node_keys = self.keys[((len(self.keys) + 1) // 2) - 1:]
             new_node_children = self.children[(len(self.children) // 2):]
             self.keys = self.keys[:((len(self.keys) + 1) // 2) - 1]
             self.children = self.children[:(len(self.children) // 2)]
-            new_node_keys.pop(0)
+            k = new_node_keys.pop(0)
         new_node = Node(self, self.next, is_leaf, self.parent, self.branching_factor)
         new_node.set_children(new_node_keys, new_node_children)
         self.next = new_node
 
-        return new_node
+        return new_node, k
 
 
 class Segment:

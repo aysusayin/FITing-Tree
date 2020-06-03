@@ -76,17 +76,18 @@ class FITtingTree:
     def __binary_file_search(file, key, start_pos=0, end_pos=None):
         pos = -1
         left = start_pos
-        if end_pos:
+        right = int(os.path.getsize(file) / const.RECORD_SIZE) - 1
+        if end_pos and end_pos < right: #check if end position is less than file length
             right = end_pos
-        else:
-            right = int(os.path.getsize(file) / const.RECORD_SIZE) - 1
+
         with open(file, 'rb') as seg_file:
             while left <= right:
                 mid = int(left + (right - left) // 2)
-                print('file: %s' % file)
-                print('left: %d right: %d' % (left, right))
+                ##print('file: %s' % file)
+                ##print('left: %d right: %d' % (left, right))
                 seg_file.seek(const.RECORD_SIZE * mid, 0)
                 tmp_key = int.from_bytes(seg_file.read(const.KEY_SIZE), byteorder='big')
+                ##print(tmp_key)
                 if tmp_key == key:
                     pos = mid * const.RECORD_SIZE
                     break
@@ -108,7 +109,7 @@ class FITtingTree:
 
         if position != -1:
             return self.__parse_fields(segment.buff_file_name, position)
-
+        print("Data with key %d does not exist in the database" % key)
         return "Data with key %d does not exist in the database" % key
 
     def __search_segment(self, segment, key):
@@ -120,22 +121,25 @@ class FITtingTree:
         current_node = self.root
         while not current_node.is_leaf:
             idx = bisect_left(current_node.keys, key)
-            current_node = current_node.children[idx-1]
+            current_node = current_node.children[idx]
         return current_node
 
     def look_up(self, key):
         node = self.__search_tree(key)
-        seg = node.children[min(bisect_left(node.keys, key), len(node.children)-1)]
+        i = bisect_left(node.keys, key) - 1
+        if i+1 < len(node.keys) and node.keys[i + 1] == key:
+            i += 1
+        seg = node.children[max(i, 0)]
         val = self.__search_segment(seg, key)
         return val
 
     def put(self, key_value, fields):
         leaf = self.__search_tree(key_value)
-
         ind = bisect_left(leaf.keys, key_value) - 1
-        segment = leaf.children[ind]
+        if ind + 1 < len(leaf.keys) and leaf.keys[ind + 1] == key_value:
+            ind += 1
+        segment = leaf.children[max(ind, 0)]
         #print('HERE33 key_to_add: %d, ind: %d, segment_start_key: %d' % (key_value, ind, segment.start_key))
-
         # Database update - delta insert
         buffer_name = segment.buff_file_name
         buffer_copy = open('buffer_copy', 'wb+')
@@ -164,7 +168,8 @@ class FITtingTree:
         os.remove(buffer_name)
         os.rename('buffer_copy', buffer_name)
 
-        if os.path.getsize(buffer_name) >= const.BUFFER_SIZE:
+        size = os.path.getsize(buffer_name)
+        if size >= const.BUFFER_SIZE:
             # re segment buffer and the segment data
             # if new segments are formed, add it to tree
             segment_file_name = segment.seg_file_name
@@ -187,42 +192,44 @@ class FITtingTree:
                 self.__insert_segment(s, leaf)
 
     def __insert_segment(self, segment, leaf):
+        # node split oldugunda ortadaki deger yukari cikiyor o nodedan gidiyo
         key = segment.start_key
         i = bisect_left(leaf.keys, key)
         leaf.keys.insert(i, key)
         leaf.children.insert(i, segment)
-
-        while len(leaf.children) >= self.branching_factor:
-            new_child = leaf.split()  # leaf, new_child
-            if leaf.parent is None:
+        node = leaf
+        while len(node.children) >= self.branching_factor:
+            new_child, k = node.split()  # node, new_child
+            if node.parent is None:
                 # create a parent node and break
                 new_root = Node(None, None, False, None, self.branching_factor)
-                new_root.set_children([new_child.keys[0]], [leaf, new_child])
+                new_root.set_children([k], [node, new_child])
                 self.root = new_root
                 break
             else:
-                leaf = leaf.parent
+                node = node.parent
                 # add new node to parent
-                i = bisect_left(leaf.keys, new_child.keys[0])
-                leaf.keys.insert(i, new_child.keys[0])
-                leaf.children.insert(i + 1, new_child)
+                i = bisect_left(node.keys, k)
+                node.keys.insert(i, k)
+                node.children.insert(i + 1, new_child)
 
     def print_tree(self):
         queue = collections.deque()
         node = self.root
         queue.append(node)
         while queue:
-            tmp = queue.pop()
+            tmp = queue.popleft()
             if not tmp.is_leaf:
                 for c in tmp.children:
                     queue.append(c)
+            ''' 
             print('Node:')
             print(tmp)
             print('Parent:')
             print(tmp.parent)
             print('Node keys:')
             print(tmp.keys)
-            print('-----------------')
+            print('-----------------')'''
 
     @staticmethod
     def __split_files(segments, tmp_file_name):
