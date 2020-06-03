@@ -77,17 +77,17 @@ class FITtingTree:
         pos = -1
         left = start_pos
         right = int(os.path.getsize(file) / const.RECORD_SIZE) - 1
-        if end_pos and end_pos < right: #check if end position is less than file length
+        if end_pos and end_pos < right: # check if end position is less than file length
             right = end_pos
 
         with open(file, 'rb') as seg_file:
             while left <= right:
                 mid = int(left + (right - left) // 2)
-                ##print('file: %s' % file)
-                ##print('left: %d right: %d' % (left, right))
+                # print('file: %s' % file)
+                # print('left: %d right: %d' % (left, right))
                 seg_file.seek(const.RECORD_SIZE * mid, 0)
                 tmp_key = int.from_bytes(seg_file.read(const.KEY_SIZE), byteorder='big')
-                ##print(tmp_key)
+                # print(tmp_key)
                 if tmp_key == key:
                     pos = mid * const.RECORD_SIZE
                     break
