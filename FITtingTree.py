@@ -121,24 +121,22 @@ class FITtingTree:
         current_node = self.root
         while not current_node.is_leaf:
             idx = bisect_left(current_node.keys, key)
+            if idx < len(current_node.keys) and current_node.keys[idx] == key:
+                idx += 1
             current_node = current_node.children[idx]
         return current_node
 
     def look_up(self, key):
         node = self.__search_tree(key)
-        i = bisect_left(node.keys, key) - 1
-        if i+1 < len(node.keys) and node.keys[i + 1] == key:
-            i += 1
+        i = self.__binary_search_list(node.keys, key)
         seg = node.children[max(i, 0)]
         val = self.__search_segment(seg, key)
         return val
 
     def put(self, key_value, fields):
         leaf = self.__search_tree(key_value)
-        ind = bisect_left(leaf.keys, key_value) - 1
-        if ind + 1 < len(leaf.keys) and leaf.keys[ind + 1] == key_value:
-            ind += 1
-        segment = leaf.children[max(ind, 0)]
+        ind = self.__binary_search_list(leaf.keys, key_value)
+        segment = leaf.children[ind]
         #print('HERE33 key_to_add: %d, ind: %d, segment_start_key: %d' % (key_value, ind, segment.start_key))
         # Database update - delta insert
         buffer_name = segment.buff_file_name
@@ -281,3 +279,10 @@ class FITtingTree:
         os.remove(buffer_file_name)
 
         return keys, new_segment_file_name
+
+    @staticmethod
+    def __binary_search_list(list_name, key):
+        i = bisect_left(list_name, key) - 1
+        if i + 1 < len(list_name) and list_name[i + 1] == key:
+            i += 1
+        return max(i, 0)
