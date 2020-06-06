@@ -3,6 +3,7 @@ from Node import Node, Segment
 import constants as const
 import os
 import collections
+import struct
 from bisect import bisect_left
 
 
@@ -68,7 +69,7 @@ class FITtingTree:
             f.seek(pos, 0)
             key = int.from_bytes(f.read(const.KEY_SIZE), byteorder='big')
             for i in range(const.FIELD_NUM):
-                fields.append(int.from_bytes(f.read(const.FIELD_SIZE), byteorder='big'))
+                fields.append(FITtingTree.__bytes_to_double(f.read(const.FIELD_SIZE), byteorder='big'))
 
         return key, fields
 
@@ -155,7 +156,7 @@ class FITtingTree:
 
             buffer_copy.write(key_value.to_bytes(const.KEY_SIZE, byteorder='big', signed=True))
             for field in fields:
-                buffer_copy.write(field.to_bytes(const.FIELD_SIZE, byteorder='big', signed=True))
+                buffer_copy.write(self.__double_to_bytes(field))
 
             while tmp_key:
                 buffer_copy.write(tmp_key)
@@ -286,3 +287,14 @@ class FITtingTree:
         if i + 1 < len(list_name) and list_name[i + 1] == key:
             i += 1
         return max(i, 0)
+
+    @staticmethod
+    def __double_to_bytes(number):
+        double_as_hex = hex(struct.unpack('<Q', struct.pack('<d', number))[0])
+        double_as_bytes = bytearray.fromhex(double_as_hex.lstrip('0x').rstrip('L'))
+        return double_as_bytes
+
+    @staticmethod
+    def __bytes_to_double(number):
+        return struct.unpack('>d', number)[0]
+
