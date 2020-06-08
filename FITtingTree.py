@@ -1,17 +1,16 @@
 """ A generic FITting tree """
-from Node import Node, Segment
-import constants as const
+from FITtingTree import Node
+from FITtingTree import constants as const
 import os
 import collections
-import struct
 from bisect import bisect_left
 
 
 class FITtingTree:
     def __init__(self, error, buffer_error, branching_factor=16):
         self.branching_factor = branching_factor
-        self.root = Node(None, None, True, branching_factor=branching_factor)
-        seg = Segment(1, 1, 1)
+        self.root = Node.Node(None, None, True, branching_factor=branching_factor)
+        seg = Node.Segment(1, 1, 1)
         self.root.set_children([1], [seg])
         self.put(1, [0 for _ in range(const.FIELD_NUM)])
         self.error = error - buffer_error
@@ -40,7 +39,7 @@ class FITtingTree:
                 slope = (high_slope + low_slope)/2
                 if end_key == origin_key:
                     slope = 1
-                new_segment = Segment(slope,
+                new_segment = Node.Segment(slope,
                                       origin_key,
                                       end_key)
                 high_slope = float('inf')
@@ -54,7 +53,7 @@ class FITtingTree:
         if end_key == origin_key:
             slope = 1
 
-        new_segment = Segment(slope,
+        new_segment = Node.Segment(slope,
                               origin_key,
                               end_key)
         segments.append(new_segment)
@@ -69,7 +68,7 @@ class FITtingTree:
             f.seek(pos, 0)
             key = int.from_bytes(f.read(const.KEY_SIZE), byteorder='big')
             for i in range(const.FIELD_NUM):
-                fields.append(FITtingTree.__bytes_to_double(f.read(const.FIELD_SIZE), byteorder='big'))
+                fields.append(FITtingTree.__bytes_to_double(f.read(const.FIELD_SIZE)))
 
         return key, fields
 
@@ -110,6 +109,7 @@ class FITtingTree:
 
         if position != -1:
             return self.__parse_fields(segment.buff_file_name, position)
+
         print("Data with key %d does not exist in the database" % key)
         return "Data with key %d does not exist in the database" % key
 
@@ -201,7 +201,7 @@ class FITtingTree:
             new_child, k = node.split()  # node, new_child
             if node.parent is None:
                 # create a parent node and break
-                new_root = Node(None, None, False, None, self.branching_factor)
+                new_root = Node.Node(None, None, False, None, self.branching_factor)
                 new_root.set_children([k], [node, new_child])
                 self.root = new_root
                 break
@@ -290,11 +290,9 @@ class FITtingTree:
 
     @staticmethod
     def __double_to_bytes(number):
-        double_as_hex = hex(struct.unpack('<Q', struct.pack('<d', number))[0])
-        double_as_bytes = bytearray.fromhex(double_as_hex.lstrip('0x').rstrip('L'))
-        return double_as_bytes
+        return bytes(str(number).strip(), 'utf-8') + b" " * (const.FIELD_SIZE - len(str(number)))
 
     @staticmethod
     def __bytes_to_double(number):
-        return struct.unpack('>d', number)[0]
+        return float(number.decode('utf-8').strip())
 

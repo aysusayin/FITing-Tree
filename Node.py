@@ -1,4 +1,4 @@
-import constants as const
+from FITtingTree import constants as const
 
 
 class Node:
