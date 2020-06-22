@@ -2,7 +2,6 @@
 from FITtingTree import Node
 from FITtingTree import constants as const
 import os
-import collections
 from bisect import bisect_left
 
 
@@ -12,7 +11,7 @@ class FITtingTree:
         self.root = Node.Node(None, None, True, branching_factor=branching_factor)
         seg = Node.Segment(1, 1, 1)
         self.root.set_children([1], [seg])
-        self.put(1, [0 for _ in range(const.FIELD_NUM)])
+        self.put(0, [0 for _ in range(const.FIELD_NUM)])
         self.error = error - buffer_error
         self.buffer_error = buffer_error
 
@@ -66,9 +65,10 @@ class FITtingTree:
         fields = []
         with open(file, 'rb') as f:
             f.seek(pos, 0)
-            key = int.from_bytes(f.read(const.KEY_SIZE), byteorder='big')
+            key = FITtingTree.__decode_field(f.read(const.KEY_SIZE), 'int')
+
             for i in range(const.FIELD_NUM):
-                fields.append(FITtingTree.__bytes_to_double(f.read(const.FIELD_SIZE)))
+                fields.append(FITtingTree.__decode_field(f.read(const.FIELD_SIZE), const.FIELD_TYPE))
 
         return key, fields
 
@@ -86,8 +86,8 @@ class FITtingTree:
                 # print('file: %s' % file)
                 # print('left: %d right: %d' % (left, right))
                 seg_file.seek(const.RECORD_SIZE * mid, 0)
-                tmp_key = int.from_bytes(seg_file.read(const.KEY_SIZE), byteorder='big')
-                # print(tmp_key)
+                tmp_key = FITtingTree.__decode_field(seg_file.read(const.KEY_SIZE), 'int')
+
                 if tmp_key == key:
                     pos = mid * const.RECORD_SIZE
                     break
@@ -146,17 +146,18 @@ class FITtingTree:
         # Add to buffer
         with open(buffer_name, 'rb') as f:
             tmp_key = f.read(const.KEY_SIZE)
-            readable_tmp_key = int.from_bytes(tmp_key, byteorder='big')
+            readable_tmp_key = FITtingTree.__decode_field(tmp_key, 'int')
             # Buffer needs to be sorted so put the key to the right place
             while tmp_key and readable_tmp_key < key_value:
                 buffer_copy.write(tmp_key)
                 buffer_copy.write(f.read(const.ALL_FIELDS_SIZE))
                 tmp_key = f.read(const.KEY_SIZE)
-                readable_tmp_key = int.from_bytes(tmp_key, byteorder='big')
+                readable_tmp_key = FITtingTree.__decode_field(tmp_key, 'int')
 
-            buffer_copy.write(key_value.to_bytes(const.KEY_SIZE, byteorder='big', signed=True))
+            buffer_copy.write(self.__encode_field(key_value, const.KEY_SIZE))
+
             for field in fields:
-                buffer_copy.write(self.__double_to_bytes(field))
+                buffer_copy.write(self.__encode_field(field, const.FIELD_SIZE))
 
             while tmp_key:
                 buffer_copy.write(tmp_key)
@@ -168,7 +169,8 @@ class FITtingTree:
         os.rename('buffer_copy', buffer_name)
 
         size = os.path.getsize(buffer_name)
-        if size >= const.BUFFER_SIZE:
+        buffer_size = self.buffer_error * const.RECORD_SIZE
+        if size >= buffer_size:
             # re segment buffer and the segment data
             # if new segments are formed, add it to tree
             segment_file_name = segment.seg_file_name
@@ -212,37 +214,20 @@ class FITtingTree:
                 node.keys.insert(i, k)
                 node.children.insert(i + 1, new_child)
 
-    def print_tree(self):
-        queue = collections.deque()
-        node = self.root
-        queue.append(node)
-        while queue:
-            tmp = queue.popleft()
-            if not tmp.is_leaf:
-                for c in tmp.children:
-                    queue.append(c)
-            ''' 
-            print('Node:')
-            print(tmp)
-            print('Parent:')
-            print(tmp.parent)
-            print('Node keys:')
-            print(tmp.keys)
-            print('-----------------')'''
-
     @staticmethod
     def __split_files(segments, tmp_file_name):
         tmp_file = open(tmp_file_name, 'rb')
         for s in segments:
             tmp_key = tmp_file.read(const.KEY_SIZE)
-            tmp_key_readable = int.from_bytes(tmp_key, byteorder='big')
+            tmp_key_readable = FITtingTree.__decode_field(tmp_key, 'int')
+
             # Start copying
             with open(s.seg_file_name, 'wb') as f:
                 while tmp_key_readable != s.end_key:
                     f.write(tmp_key)
                     f.write(tmp_file.read(const.ALL_FIELDS_SIZE))
                     tmp_key = tmp_file.read(const.KEY_SIZE)
-                    tmp_key_readable = int.from_bytes(tmp_key, byteorder='big')
+                    tmp_key_readable = FITtingTree.__decode_field(tmp_key, 'int')
                 f.write(tmp_key)
                 f.write(tmp_file.read(const.ALL_FIELDS_SIZE))
         tmp_file.close()
@@ -258,8 +243,8 @@ class FITtingTree:
         key_seg = segment_file.read(const.KEY_SIZE)
         key_buff = buffer_file.read(const.KEY_SIZE)
         while key_buff or key_seg:
-            key_buff_readable = int.from_bytes(key_buff, byteorder='big')
-            key_seg_readable = int.from_bytes(key_seg, byteorder='big')
+            key_buff_readable = FITtingTree.__decode_field(key_buff, 'int')
+            key_seg_readable = FITtingTree.__decode_field(key_seg, 'int')
             if key_seg and (not key_buff or key_buff_readable > key_seg_readable):
                 new_segment_file.write(key_seg)
                 keys.append(key_seg_readable)
@@ -289,10 +274,21 @@ class FITtingTree:
         return max(i, 0)
 
     @staticmethod
-    def __double_to_bytes(number):
-        return bytes(str(number).strip(), 'utf-8') + b" " * (const.FIELD_SIZE - len(str(number)))
+    def __encode_field(number, size):
+        if isinstance(number, int):
+            return number.to_bytes(size, byteorder='big', signed=True)
+        else:
+            if isinstance(number, float) and number == int(number):
+                number = int(number)
+            if size - len(str(number)) < 0:
+                print('Data doesn\'t fit in the provided field size: %s\nAborting...' % str(number))
+                exit()
+            return bytes(str(number).strip(), 'utf-8') + b" " * (size - len(str(number)))
+
 
     @staticmethod
-    def __bytes_to_double(number):
-        return float(number.decode('utf-8').strip())
-
+    def __decode_field(number, decode_type):
+        if decode_type == 'int':
+            return int.from_bytes(number, byteorder='big')
+        else:
+            return str(number.decode('utf-8').strip())
