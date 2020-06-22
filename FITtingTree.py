@@ -11,9 +11,9 @@ class FITtingTree:
         self.root = Node.Node(None, None, True, branching_factor=branching_factor)
         seg = Node.Segment(1, 1, 1)
         self.root.set_children([1], [seg])
-        self.put(0, [0 for _ in range(const.FIELD_NUM)])
         self.error = error - buffer_error
         self.buffer_error = buffer_error
+        self.put(0, [0 for _ in range(const.FIELD_NUM)])
 
     def __shrinking_cone_segmentation(self, keys, locations):
         # data is the keys and pointers , it must be sorted
@@ -35,12 +35,10 @@ class FITtingTree:
                 low_slope = max(low_slope, tmp_low_slope)
                 end_key = key
             else:
-                slope = (high_slope + low_slope)/2
+                slope = (high_slope + low_slope) / 2
                 if end_key == origin_key:
                     slope = 1
-                new_segment = Node.Segment(slope,
-                                      origin_key,
-                                      end_key)
+                new_segment = Node.Segment(slope, origin_key, end_key)
                 high_slope = float('inf')
                 low_slope = 0
                 origin_key = key
@@ -52,9 +50,7 @@ class FITtingTree:
         if end_key == origin_key:
             slope = 1
 
-        new_segment = Node.Segment(slope,
-                              origin_key,
-                              end_key)
+        new_segment = Node.Segment(slope, origin_key, end_key)
         segments.append(new_segment)
 
         return segments
@@ -77,14 +73,12 @@ class FITtingTree:
         pos = -1
         left = start_pos
         right = int(os.path.getsize(file) / const.RECORD_SIZE) - 1
-        if end_pos and end_pos < right: # check if end position is less than file length
+        if end_pos and end_pos < right:  # check if end position is less than file length
             right = end_pos
 
         with open(file, 'rb') as seg_file:
             while left <= right:
                 mid = int(left + (right - left) // 2)
-                # print('file: %s' % file)
-                # print('left: %d right: %d' % (left, right))
                 seg_file.seek(const.RECORD_SIZE * mid, 0)
                 tmp_key = FITtingTree.__decode_field(seg_file.read(const.KEY_SIZE), 'int')
 
@@ -138,7 +132,7 @@ class FITtingTree:
         leaf = self.__search_tree(key_value)
         ind = self.__binary_search_list(leaf.keys, key_value)
         segment = leaf.children[ind]
-        #print('HERE33 key_to_add: %d, ind: %d, segment_start_key: %d' % (key_value, ind, segment.start_key))
+
         # Database update - delta insert
         buffer_name = segment.buff_file_name
         buffer_copy = open('buffer_copy', 'wb+')
@@ -193,7 +187,6 @@ class FITtingTree:
                 self.__insert_segment(s, leaf)
 
     def __insert_segment(self, segment, leaf):
-        # node split oldugunda ortadaki deger yukari cikiyor o nodedan gidiyo
         key = segment.start_key
         i = bisect_left(leaf.keys, key)
         leaf.keys.insert(i, key)
@@ -284,7 +277,6 @@ class FITtingTree:
                 print('Data doesn\'t fit in the provided field size: %s\nAborting...' % str(number))
                 exit()
             return bytes(str(number).strip(), 'utf-8') + b" " * (size - len(str(number)))
-
 
     @staticmethod
     def __decode_field(number, decode_type):
