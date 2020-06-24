@@ -7,6 +7,7 @@ from bisect import bisect_left
 
 class FITtingTree:
     def __init__(self, error, buffer_error, branching_factor=16):
+        self.key_type = 'int'
         self.branching_factor = branching_factor
         self.root = Node.Node(None, None, True, branching_factor=branching_factor)
         seg = Node.Segment(1, 0, 0)
@@ -60,21 +61,19 @@ class FITtingTree:
 
         return segments
 
-    @staticmethod
-    def __parse_fields(file, pos):
+    def __parse_fields(self, file, pos):
         # pos is the start of the record
         fields = []
         with open(file, 'rb') as f:
             f.seek(pos, 0)
-            key = FITtingTree.__decode_field(f.read(const.KEY_SIZE), 'int')
+            key = self.__decode_field(f.read(const.KEY_SIZE), self.key_type)
 
             for i in range(const.FIELD_NUM):
-                fields.append(FITtingTree.__decode_field(f.read(const.FIELD_SIZE), const.FIELD_TYPE))
+                fields.append(self.__decode_field(f.read(const.FIELD_SIZE), const.FIELD_TYPE))
 
         return key, fields
 
-    @staticmethod
-    def __binary_file_search(file, key, start_pos=0, end_pos=None):
+    def __binary_file_search(self, file, key, start_pos=0, end_pos=None):
         pos = -1
         left = start_pos
         right = int(os.path.getsize(file) / const.RECORD_SIZE) - 1
@@ -85,7 +84,7 @@ class FITtingTree:
             while left <= right:
                 mid = int(left + (right - left) // 2)
                 seg_file.seek(const.RECORD_SIZE * mid, 0)
-                tmp_key = FITtingTree.__decode_field(seg_file.read(const.KEY_SIZE), 'int')
+                tmp_key = self.__decode_field(seg_file.read(const.KEY_SIZE), self.key_type)
 
                 if tmp_key == key:
                     pos = mid * const.RECORD_SIZE
@@ -145,13 +144,13 @@ class FITtingTree:
         # Add to buffer
         with open(buffer_name, 'rb') as f:
             tmp_key = f.read(const.KEY_SIZE)
-            readable_tmp_key = FITtingTree.__decode_field(tmp_key, 'int')
+            readable_tmp_key = FITtingTree.__decode_field(tmp_key, self.key_type)
             # Buffer needs to be sorted so put the key to the right place
             while tmp_key and readable_tmp_key <= key_value:
                 buffer_copy.write(tmp_key)
                 buffer_copy.write(f.read(const.ALL_FIELDS_SIZE))
                 tmp_key = f.read(const.KEY_SIZE)
-                readable_tmp_key = FITtingTree.__decode_field(tmp_key, 'int')
+                readable_tmp_key = FITtingTree.__decode_field(tmp_key, self.key_type)
 
             if readable_tmp_key == key_value:
                 buffer_copy.close()
@@ -217,12 +216,11 @@ class FITtingTree:
                 node.keys.insert(i, k)
                 node.children.insert(i + 1, new_child)
 
-    @staticmethod
-    def __split_files(segments, tmp_file_name):
+    def __split_files(self, segments, tmp_file_name):
         tmp_file = open(tmp_file_name, 'rb')
         for s in segments:
             tmp_key = tmp_file.read(const.KEY_SIZE)
-            tmp_key_readable = FITtingTree.__decode_field(tmp_key, 'int')
+            tmp_key_readable = self.__decode_field(tmp_key, self.key_type)
 
             # Start copying
             with open(s.seg_file_name, 'wb') as f:
@@ -230,14 +228,13 @@ class FITtingTree:
                     f.write(tmp_key)
                     f.write(tmp_file.read(const.ALL_FIELDS_SIZE))
                     tmp_key = tmp_file.read(const.KEY_SIZE)
-                    tmp_key_readable = FITtingTree.__decode_field(tmp_key, 'int')
+                    tmp_key_readable = self.__decode_field(tmp_key, self.key_type)
                 f.write(tmp_key)
                 f.write(tmp_file.read(const.ALL_FIELDS_SIZE))
         tmp_file.close()
         os.remove(tmp_file_name)
 
-    @staticmethod
-    def __concatenate_files(segment_file_name, buffer_file_name):
+    def __concatenate_files(self, segment_file_name, buffer_file_name):
         new_segment_file_name = '%s_tmp' % segment_file_name
         segment_file = open(segment_file_name, 'rb')
         buffer_file = open(buffer_file_name, 'rb')
@@ -246,8 +243,8 @@ class FITtingTree:
         key_seg = segment_file.read(const.KEY_SIZE)
         key_buff = buffer_file.read(const.KEY_SIZE)
         while key_buff or key_seg:
-            key_buff_readable = FITtingTree.__decode_field(key_buff, 'int')
-            key_seg_readable = FITtingTree.__decode_field(key_seg, 'int')
+            key_buff_readable = self.__decode_field(key_buff, self.key_type)
+            key_seg_readable = self.__decode_field(key_seg, self.key_type)
             if key_seg and (not key_buff or key_buff_readable > key_seg_readable):
                 new_segment_file.write(key_seg)
                 keys.append(key_seg_readable)
