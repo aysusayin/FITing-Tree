@@ -9,10 +9,15 @@ class FITtingTree:
     def __init__(self, error, buffer_error, branching_factor=16):
         self.branching_factor = branching_factor
         self.root = Node.Node(None, None, True, branching_factor=branching_factor)
-        seg = Node.Segment(1, 1, 1)
-        self.root.set_children([1], [seg])
+        seg = Node.Segment(1, 0, 0)
+        self.root.set_children([0], [seg])
         self.error = error - buffer_error
         self.buffer_error = buffer_error
+        if buffer_error > error:
+            print('Buffer Error should be less than total error. Your values are\n'
+                  'Buffer error: %f Total error: %f\n'
+                  'Aborting...' % (self.buffer_error, self.error))
+            exit()
         self.put(0, [0 for _ in range(const.FIELD_NUM)])
 
     def __shrinking_cone_segmentation(self, keys, locations):
@@ -142,11 +147,16 @@ class FITtingTree:
             tmp_key = f.read(const.KEY_SIZE)
             readable_tmp_key = FITtingTree.__decode_field(tmp_key, 'int')
             # Buffer needs to be sorted so put the key to the right place
-            while tmp_key and readable_tmp_key < key_value:
+            while tmp_key and readable_tmp_key <= key_value:
                 buffer_copy.write(tmp_key)
                 buffer_copy.write(f.read(const.ALL_FIELDS_SIZE))
                 tmp_key = f.read(const.KEY_SIZE)
                 readable_tmp_key = FITtingTree.__decode_field(tmp_key, 'int')
+
+            if readable_tmp_key == key_value:
+                buffer_copy.close()
+                os.remove('buffer_copy')
+                return
 
             buffer_copy.write(self.__encode_field(key_value, const.KEY_SIZE))
 
@@ -247,6 +257,9 @@ class FITtingTree:
                 new_segment_file.write(key_buff)
                 keys.append(key_buff_readable)
                 new_segment_file.write(buffer_file.read(const.ALL_FIELDS_SIZE))
+                key_buff = buffer_file.read(const.KEY_SIZE)
+            elif key_buff and key_seg and key_seg_readable == key_buff_readable:
+                buffer_file.read(const.ALL_FIELDS_SIZE)
                 key_buff = buffer_file.read(const.KEY_SIZE)
             else:
                 break
