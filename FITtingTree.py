@@ -1,6 +1,6 @@
 """ A generic FITting tree """
-from FITtingTree import Node
-from FITtingTree import constants as const
+from Node import Node
+from constants import constants as const
 import os
 from bisect import bisect_left
 
